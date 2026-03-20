@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DEEP WEB TERMINAL v4.0 | ONLINE</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        :root {
+            --term-bg: #050505;
+            --term-color: #00ff41;
+            --term-dim: #008f11;
+            --term-alert: #ff003c;
+            --font-mono: 'Courier New', Courier, monospace;
+        }
+
+        body, html {
+            margin: 0; padding: 0;
+            height: 100%;
+            background-color: var(--term-bg);
+            color: var(--term-color);
+            font-family: var(--font-mono);
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* Эффект старого ЭЛТ монитора */
+        body::after {
+            content: " "; display: block; position: absolute;
+            top: 0; left: 0; bottom: 0; right: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), 
+                        linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            z-index: 10; background-size: 100% 2px, 3px 100%; pointer-events: none;
+        }
+
+        #terminal {
+            width: 95vw; max-width: 900px; height: 90vh;
+            border: 2px solid var(--term-dim);
+            padding: 20px; display: flex; flex-direction: column;
+            box-shadow: 0 0 20px rgba(0, 255, 65, 0.2);
+            background: rgba(0, 0, 0, 0.9);
+            position: relative; z-index: 5;
+        }
+
+        .header { text-align: center; border-bottom: 1px dashed var(--term-dim); padding-bottom: 10px; margin-bottom: 20px; }
+        
+        .glitch { font-size: 1.5rem; font-weight: bold; cursor: crosshair; }
+        .glitch:hover { animation: glitch-skew 0.2s infinite; }
+
+        .channels { display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap; }
+        .channel-btn {
+            background: transparent; color: var(--term-dim); border: 1px solid var(--term-dim);
+            padding: 5px 12px; cursor: pointer; font-family: var(--font-mono); font-size: 0.8rem;
+        }
+        .channel-btn.active { background: var(--term-color); color: black; box-shadow: 0 0 8px var(--term-color); }
+
+        #chat-box {
+            flex-grow: 1; overflow-y: auto; border: 1px solid #111;
+            padding: 10px; margin-bottom: 15px; display: flex; flex-direction: column; gap: 8px;
+        }
+        #chat-box::-webkit-scrollbar { width: 8px; }
+        #chat-box::-webkit-scrollbar-thumb { background: var(--term-dim); }
+
+        .message { word-wrap: break-word; font-size: 0.9rem; }
+        .msg-time { color: #555; margin-right: 8px; }
+        .msg-author { color: var(--term-color); font-weight: bold; margin-right: 8px; }
+        .msg-text { color: #ccc; }
+        .scrambled { color: var(--term-dim); }
+        .system-msg { color: var(--term-alert); font-style: italic; display: block; margin: 5px 0; }
+
+        .input-area { display: flex; gap: 10px; border-top: 1px solid var(--term-dim); padding-top: 15px; }
+        #msg-input {
+            flex-grow: 1; background: transparent; border: none;
+            color: var(--term-color); font-family: var(--font-mono); outline: none;
+        }
+        #send-btn { background: transparent; border: 1px solid var(--term-color); color: var(--term-color); cursor: pointer; padding: 5px 15px; }
+        #send-btn:hover { background: var(--term-color); color: #000; }
+
+        @keyframes glitch-skew { 0% { transform: skew(0); } 50% { transform: skew(5deg); } 100% { transform: skew(-5deg); } }
+    </style>
+</head>
+<body>
+
+<div id="terminal">
+    <div class="header">
+        <div class="glitch" data-text="DEEP WEB TERMINAL v4.0">DEEP WEB TERMINAL v4.0</div>
+        <div id="status" style="font-size: 0.7rem; color: var(--term-dim);">CONNECTING TO DARKNET...</div>
+    </div>
+
+    <div class="channels" id="channels-container"></div>
+    <div id="chat-box"></div>
+
+    <div class="input-area">
+        <span style="color:var(--term-dim)">anon@darknet:~$</span>
+        <input type="text" id="msg-input" placeholder="Введите пакет данных..." autocomplete="off">
+        <button id="send-btn">SEND</button>
+    </div>
+</div>
+
+<script>
+    // --- КОНФИГУРАЦИЯ (ВСТАВЬ СВОИ ДАННЫЕ) ---
+    const SUPABASE_URL = 'https://tytziursdyrjbujkgigs.supabase.co'; 
+    const SUPABASE_KEY = 'sb_publishable_1iWrf_qitQ7BgcwS32SPug_fL64YmPG';
+    const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    // --- ЛОГИКА АНОНИМНОСТИ ---
+    let myId = sessionStorage.getItem('anon_id') || `[ANON-${Math.floor(Math.random()*8999)+1000}]`;
+    sessionStorage.setItem('anon_id', myId);
+
+    let currentChannel = '#ОБЩИЙ';
+    const channels = ['#ОБЩИЙ', '#ТОРГОВЛЯ-ИНФОЙ', '#НАЕМНИКИ', '#СЛИВЫ'];
+    const chatBox = document.getElementById('chat-box');
+    const input = document.getElementById('msg-input');
+    const status = document.getElementById('status');
+
+    // --- ЗВУКОВОЙ ДВИЖОК ---
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    function playTick() {
+        const osc = audioCtx.createOscillator();
+        const g = audioCtx.createGain();
+        osc.type = 'sine'; osc.frequency.setValueAtTime(200 + Math.random()*300, audioCtx.currentTime);
+        g.gain.setValueAtTime(0.02, audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.04);
+        osc.connect(g); g.connect(audioCtx.destination);
+        osc.start(); osc.stop(audioCtx.currentTime + 0.04);
+    }
+
+    // --- ШИФРОВАНИЕ ВИЗУАЛ ---
+    const charset = "XYZ$%&*#@!0123456789";
+    function scramble(t) { return t.split('').map(c => c === ' ' ? ' ' : charset[Math.floor(Math.random()*charset.length)]).join(''); }
+
+    // --- РАБОТА С БАЗОЙ ---
+    async function loadHistory() {
+        status.innerText = "RETRIEVING HISTORY...";
+        const { data, error } = await supabase
+            .from('messages')
+            .select('*')
+            .eq('channel', currentChannel)
+            .order('id', { ascending: true })
+            .limit(50);
+        
+        chatBox.innerHTML = '';
+        if (data) data.forEach(m => displayMessage(m, false));
+        status.innerText = "ENCRYPTED CONNECTION: STABLE";
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    async function sendToCloud() {
+        const text = input.value.trim();
+        if (!text) return;
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+
+        const { error } = await supabase.from('messages').insert([
+            { author: myId, text: text, channel: currentChannel }
+        ]);
+
+        if (error) console.error(error);
+        input.value = '';
+    }
+
+    function displayMessage(msg, animate = true) {
+        const div = document.createElement('div');
+        div.className = 'message';
+        const time = new Date(msg.created_at || Date.now()).toLocaleTimeString().split(' ')[0];
+        
+        div.innerHTML = `<span class="msg-time">[${time}]</span><span class="msg-author">${msg.author}</span>`;
+        const textSpan = document.createElement('span');
+        textSpan.className = 'msg-text';
+        div.appendChild(textSpan);
+        chatBox.appendChild(div);
+
+        if (animate) {
+            textSpan.classList.add('scrambled');
+            textSpan.innerText = scramble(msg.text);
+            playTick();
+            setTimeout(() => {
+                textSpan.classList.remove('scrambled');
+                textSpan.innerText = msg.text;
+                chatBox.scrollTop = chatBox.scrollHeight;
+            }, 600);
+        } else {
+            textSpan.innerText = msg.text;
+        }
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    // --- РЕАЛЬНОЕ ВРЕМЯ ---
+    supabase
+        .channel('any')
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, payload => {
+            if (payload.new.channel === currentChannel) {
+                displayMessage(payload.new, true);
+            }
+        })
+        .subscribe();
+
+    // --- ИНТЕРФЕЙС ---
+    function renderChannels() {
+        const cont = document.getElementById('channels-container');
+        cont.innerHTML = '';
+        channels.forEach(ch => {
+            const b = document.createElement('button');
+            b.className = `channel-btn ${ch === currentChannel ? 'active' : ''}`;
+            b.innerText = ch;
+            b.onclick = () => { currentChannel = ch; renderChannels(); loadHistory(); };
+            cont.appendChild(b);
+        });
+    }
+
+    input.onkeypress = (e) => { if (e.key === 'Enter') sendToCloud(); };
+    document.getElementById('send-btn').onclick = sendToCloud;
+
+    renderChannels();
+    loadHistory();
+</script>
+</body>
+</html>
